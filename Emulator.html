@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>fx-991EX NEON — Scientific Calculator Emulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#040509;
+    --case-1:#1b1e27;
+    --case-2:#0e1015;
+    --cyan:#00fff2;
+    --magenta:#ff2ee6;
+    --yellow:#ffe066;
+    --red:#ff3b5c;
+    --green:#3dff9a;
+    --purple:#b26bff;
+    --teal:#37e6c5;
+    --screen-glow:#38ffb0;
+    --text-dim:#9fb3c8;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(0,255,242,0.10), transparent 55%),
+      radial-gradient(ellipse at 85% 110%, rgba(255,46,230,0.10), transparent 55%),
+      var(--bg);
+    color:#e8f6ff;
+    font-family:'JetBrains Mono', monospace;
+    display:flex; align-items:center; justify-content:center;
+    padding:28px 12px;
+  }
+
+  .page{ display:flex; flex-direction:column; align-items:center; width:100%; }
+
+  .mode-toggle{
+    display:flex; gap:4px; margin:0 0 16px; padding:4px;
+    background:linear-gradient(160deg,#171a22,#101218);
+    border:1px solid var(--teal); border-radius:999px;
+    box-shadow:0 0 10px rgba(55,230,197,0.15);
+  }
+  .mode-btn{
+    all:unset; cursor:pointer; padding:6px 18px; border-radius:999px;
+    font-family:'Orbitron', sans-serif; font-size:0.62rem; letter-spacing:0.1em;
+    color:var(--text-dim); transition:background .15s ease, color .15s ease, box-shadow .15s ease;
+  }
+  .mode-btn.active{
+    color:#04140f; font-weight:700;
+    background:linear-gradient(160deg,var(--teal),var(--cyan));
+    box-shadow:0 0 14px var(--teal);
+  }
+
+  .app-shell{ display:flex; gap:22px; align-items:flex-start; justify-content:center; width:100%; }
+
+  .wrap{ position:relative; width:100%; max-width:420px; }
+
+  .history-panel{
+    display:none;
+    width:270px;
+    max-height:640px;
+    background:linear-gradient(160deg,var(--case-1),var(--case-2) 70%);
+    border-radius:22px;
+    padding:16px 14px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04) inset,
+      0 24px 50px rgba(0,0,0,0.55),
+      0 0 30px rgba(0,255,242,0.05);
+    flex-direction:column;
+  }
+  .history-panel-title{
+    font-family:'Orbitron', sans-serif; font-size:0.62rem; letter-spacing:0.12em;
+    color:var(--teal); text-shadow:0 0 6px var(--teal);
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .history-clear{
+    all:unset; cursor:pointer; font-size:0.58rem; color:var(--text-dim);
+    letter-spacing:0.06em; text-decoration:underline; text-underline-offset:2px;
+  }
+  .history-clear:hover{ color:var(--red); }
+  .history-list{
+    overflow-y:auto; display:flex; flex-direction:column; gap:6px;
+    max-height:560px; padding-right:2px;
+  }
+  .history-empty{ font-size:0.68rem; color:var(--text-dim); text-align:center; padding:20px 6px; }
+  .history-item{
+    all:unset; cursor:pointer; display:block;
+    padding:8px 10px; border-radius:12px;
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(55,230,197,0.18);
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .history-item:hover{ background:rgba(55,230,197,0.08); border-color:var(--teal); }
+  .history-item .h-expr{ display:block; font-size:0.68rem; color:var(--text-dim); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .history-item .h-val{ display:block; font-size:0.9rem; color:var(--screen-glow); text-align:right; text-shadow:0 0 6px rgba(56,255,176,0.4); }
+
+  body.mode-desktop .app-shell{ max-width:900px; }
+  body.mode-desktop .wrap{ max-width:440px; }
+  body.mode-desktop .history-panel{ display:flex; }
+  body.mode-desktop .calculator{ padding:26px 24px 28px; }
+  body.mode-desktop .line-bottom{ font-size:2.25rem; }
+  body.mode-desktop .keypad-functions .key{ height:48px; font-size:0.72rem; }
+  body.mode-desktop .keypad-digits .key{ height:52px; font-size:1.05rem; }
+  body.mode-desktop .key:hover{ transform:translateY(-1px); }
+
+  .calculator{
+    position:relative;
+    background:linear-gradient(160deg,var(--case-1),var(--case-2) 70%);
+    border-radius:32px;
+    padding:20px 18px 22px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04) inset,
+      0 30px 60px rgba(0,0,0,0.6),
+      0 0 40px rgba(0,255,242,0.06);
+  }
+  .calculator::before{
+    content:"";
+    position:absolute; inset:-2px;
+    border-radius:34px;
+    padding:2px;
+    background:conic-gradient(from var(--ang,0deg), var(--cyan), var(--purple), var(--magenta), var(--yellow), var(--cyan));
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask-composite:exclude;
+    opacity:0.55;
+    animation:spin-rim 8s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes spin-rim{ to{ --ang:360deg; } }
+
+  .brand-row{
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding:0 4px 12px;
+    gap:8px;
+  }
+  .brand{
+    font-family:'Orbitron', sans-serif; font-weight:900; font-size:1.05rem;
+    letter-spacing:0.06em;
+    color:#eafcff;
+    text-shadow:0 0 10px var(--cyan), 0 0 24px rgba(0,255,242,0.5);
+    white-space:nowrap;
+  }
+  .brand span{ color:var(--magenta); text-shadow:0 0 10px var(--magenta), 0 0 22px rgba(255,46,230,0.55); }
+
+  .icon-row{ display:flex; gap:6px; align-items:center; margin-left:auto; }
+  .icon-btn{
+    all:unset; cursor:pointer;
+    width:26px; height:26px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.75rem;
+    background:linear-gradient(160deg,#20232d,#14161c 85%);
+    border:1px solid var(--teal);
+    box-shadow:0 0 6px var(--teal);
+    transition:box-shadow .15s ease, transform .05s ease;
+  }
+  .icon-btn:active{ transform:scale(0.9); box-shadow:0 0 14px var(--teal), inset 0 0 8px var(--teal); }
+
+  .model-tag{
+    font-size:0.52rem; letter-spacing:0.12em; color:var(--text-dim);
+    text-align:right; line-height:1.5; white-space:nowrap;
+  }
+  .model-tag b{ color:var(--teal); text-shadow:0 0 6px rgba(55,230,197,0.6); }
+
+  .screen{
+    position:relative;
+    background:linear-gradient(180deg,#020604,#01100b 60%);
+    border-radius:20px;
+    padding:12px 14px 14px;
+    margin-bottom:16px;
+    box-shadow:
+      inset 0 0 0 1px rgba(56,255,176,0.15),
+      inset 0 2px 18px rgba(0,0,0,0.7),
+      0 0 22px rgba(56,255,176,0.08);
+    overflow:hidden;
+  }
+  .screen::after{
+    content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 2px, transparent 3px);
+    pointer-events:none;
+  }
+  .indicators{
+    display:flex; gap:12px; align-items:center;
+    font-family:'Orbitron',sans-serif; font-size:0.55rem; letter-spacing:0.08em;
+    margin-bottom:8px; min-height:14px;
+  }
+  .ind{ color:#123028; transition:color .15s, text-shadow .15s; }
+  .ind.active{ color:var(--yellow); text-shadow:0 0 8px var(--yellow); }
+  #ind-alpha.active{ color:var(--red); text-shadow:0 0 8px var(--red); }
+  #ind-m.active{ color:var(--cyan); text-shadow:0 0 8px var(--cyan); }
+  .ind.mode{ color:var(--screen-glow); text-shadow:0 0 8px rgba(56,255,176,0.6); }
+  .copy-btn{
+    all:unset; cursor:pointer; margin-left:auto;
+    font-size:0.7rem; color:#123028; transition:color .15s, text-shadow .15s;
+  }
+  .copy-btn:hover{ color:var(--screen-glow); text-shadow:0 0 6px var(--screen-glow); }
+  .copy-btn.flash{ color:var(--yellow); text-shadow:0 0 8px var(--yellow); }
+
+  .line-top{
+    min-height:22px;
+    text-align:right;
+    font-size:1rem;
+    color:#a9ffe0;
+    text-shadow:0 0 6px rgba(56,255,176,0.55);
+    overflow-x:auto;
+    white-space:nowrap;
+    letter-spacing:0.02em;
+    scrollbar-width:none;
+  }
+  .line-top::-webkit-scrollbar{ display:none; }
+  .line-bottom{
+    text-align:right;
+    font-size:1.9rem;
+    font-weight:700;
+    color:#eafff5;
+    text-shadow:0 0 10px var(--screen-glow), 0 0 26px rgba(56,255,176,0.45);
+    min-height:2.2rem;
+    letter-spacing:0.01em;
+    word-break:break-all;
+  }
+  .line-bottom.err{ color:var(--red); text-shadow:0 0 10px var(--red), 0 0 26px rgba(255,59,92,0.5); font-size:1.2rem; }
+  .line-bottom sup{ font-size:0.55em; }
+
+  .caret{
+    display:inline-block; width:2px; height:1em; margin-bottom:-2px;
+    background:#a9ffe0; box-shadow:0 0 6px #a9ffe0;
+    animation:blink 1s steps(1) infinite;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .keypad-functions{
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    gap:6px;
+    margin-bottom:8px;
+  }
+  .keypad-digits{
+    display:grid;
+    grid-template-columns:repeat(5, 1fr);
+    gap:7px;
+  }
+  .key{
+    all:unset;
+    box-sizing:border-box;
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    height:42px;
+    border-radius:15px;
+    cursor:pointer;
+    font-family:'JetBrains Mono', monospace;
+    font-size:0.78rem;
+    font-weight:500;
+    color:#e8f9ff;
+    background:linear-gradient(160deg,#20232d,#14161c 85%);
+    border:1px solid var(--c, var(--cyan));
+    box-shadow:
+      0 0 5px var(--c, var(--cyan)),
+      inset 0 0 8px rgba(255,255,255,0.02),
+      0 2px 0 rgba(0,0,0,0.55);
+    transition:transform .05s ease, box-shadow .15s ease, background .15s ease;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;
+    text-align:center;
+    line-height:1.05;
+  }
+  .key.key-sm{ font-size:0.66rem; height:38px; }
+  .key:hover{ box-shadow:0 0 10px var(--c, var(--cyan)), inset 0 0 8px rgba(255,255,255,0.03), 0 2px 0 rgba(0,0,0,0.55); }
+  .key:active{ transform:translateY(2px) scale(0.95); box-shadow:0 0 16px var(--c, var(--cyan)), inset 0 0 12px var(--c, var(--cyan)); }
+
+  .key .shiftlabel{
+    position:absolute; top:2px; left:5px;
+    font-size:0.42rem; color:var(--yellow); text-shadow:0 0 5px var(--yellow);
+    letter-spacing:0.02em;
+  }
+  .key .alphalabel{
+    position:absolute; top:2px; right:5px;
+    font-size:0.42rem; color:var(--red); text-shadow:0 0 5px var(--red);
+  }
+
+  .key.key-shift{ --c:var(--yellow); font-weight:700; }
+  .key.key-shift.on{ background:linear-gradient(160deg,#3a3410,#14161c 85%); box-shadow:0 0 14px var(--yellow), inset 0 0 10px var(--yellow); }
+  .key.key-alpha{ --c:var(--red); font-weight:700; }
+  .key.key-alpha.on{ background:linear-gradient(160deg,#3a1017,#14161c 85%); box-shadow:0 0 14px var(--red), inset 0 0 10px var(--red); }
+  .key.key-nav{ --c:var(--cyan); }
+  .key.key-func{ --c:var(--purple); }
+  .key.key-op2{ --c:var(--teal); }
+  .key.key-mem{ --c:var(--teal); font-size:0.68rem; }
+  .key.key-digit{ --c:var(--cyan); font-size:1rem; font-weight:600; }
+  .key.key-op{ --c:var(--magenta); font-size:1.05rem; font-weight:700; }
+  .key.key-clear{ --c:var(--red); font-weight:700; }
+  .key.key-equals{ --c:var(--green); font-weight:800; font-size:1.05rem; background:linear-gradient(160deg,#123324,#0e1015 85%); }
+  .key.key-alpha2{ --c:var(--purple); }
+
+  @media (prefers-reduced-motion: reduce){
+    .calculator::before{ animation:none; }
+    .caret{ animation:none; }
+  }
+
+  .hint{
+    text-align:center; margin-top:14px; font-size:0.63rem; color:var(--text-dim); letter-spacing:0.03em;
+  }
+  .hint b{ color:var(--teal); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="mode-toggle" id="mode-toggle">
+    <button class="mode-btn active" data-mode="basic" type="button">&#128241; BASIC</button>
+    <button class="mode-btn" data-mode="desktop" type="button">&#128421; DESKTOP</button>
+  </div>
+  <div class="app-shell" id="app-shell">
+    <div class="wrap">
+      <div class="calculator">
+        <div class="brand-row">
+          <div class="brand">fx<span>-991</span>EX</div>
+          <div class="icon-row">
+            <button class="icon-btn" id="btn-sound" title="Toggle key sound">&#128266;</button>
+            <button class="icon-btn" id="btn-theme" title="Cycle color theme">&#127912;</button>
+          </div>
+          <div class="model-tag">NEON&nbsp;SERIES<br><b>NATURAL&nbsp;EXPRESSION</b></div>
+        </div>
+
+        <div class="screen">
+          <div class="indicators">
+            <span class="ind" id="ind-shift">SHIFT</span>
+            <span class="ind" id="ind-alpha">ALPHA</span>
+            <span class="ind" id="ind-m">M</span>
+            <span class="ind mode" id="ind-mode">DEG</span>
+            <button class="copy-btn" id="btn-copy" title="Copy result">&#128203;</button>
+          </div>
+          <div class="line-top" id="line-top"></div>
+          <div class="line-bottom" id="line-bottom">0</div>
+        </div>
+
+        <div class="keypad-functions" id="keypad-functions"></div>
+        <div class="keypad-digits" id="keypad-digits"></div>
+        <div class="hint">tip: <b>ʸ√x</b> = nthroot(root,value) · <b>log</b> = log(x,base) · <b>Pol/Rec</b> = (x,y) → r / θ · ▲▼ replay history</div>
+      </div>
+    </div>
+
+    <div class="history-panel" id="history-panel">
+      <div class="history-panel-title">
+        <span>CALCULATION LOG</span>
+        <button class="history-clear" id="history-clear" type="button">clear</button>
+      </div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ STATE ============ */
+  let expr = "";
+  let cursorPos = 0;
+  let ans = 0;
+  let memory = 0;
+  let xVar = 0;
+  let angleMode = "DEG"; // DEG, RAD, GRA
+  let shiftActive = false;
+  let alphaActive = false;
+
+  let justEvaluated = false;
+  let lastResultValue = null;
+  let displayFormat = "dec"; // dec, frac, dms, sci
+  let history = []; // {expr, val}
+  let historyIndex = -1;
+  let soundOn = true;
+  let audioCtx = null;
+  let lastRenderedPlainText = "0";
+  let currentMode = "basic";
+
+  const lineTop = document.getElementById("line-top");
+  const lineBottom = document.getElementById("line-bottom");
+  const indShift = document.getElementById("ind-shift");
+  const indAlpha = document.getElementById("ind-alpha");
+  const indM = document.getElementById("ind-m");
+  const indMode = document.getElementById("ind-mode");
+  const copyBtn = document.getElementById("btn-copy");
+  const soundBtn = document.getElementById("btn-sound");
+  const themeBtn = document.getElementById("btn-theme");
+  const modeToggle = document.getElementById("mode-toggle");
+  const historyList = document.getElementById("history-list");
+  const historyClearBtn = document.getElementById("history-clear");
+
+  /* ============ THEMES ============ */
+  const THEMES = [
+    { cyan:"#00fff2", magenta:"#ff2ee6", purple:"#b26bff", yellow:"#ffe066", red:"#ff3b5c", green:"#3dff9a", teal:"#37e6c5", screenglow:"#38ffb0" },
+    { cyan:"#ff6ad5", magenta:"#c774e8", purple:"#ad8cff", yellow:"#fbe37e", red:"#ff5e78", green:"#94fff2", teal:"#8bd3ff", screenglow:"#ff9df5" },
+    { cyan:"#39ff14", magenta:"#00ff87", purple:"#7bff5e", yellow:"#d4ff5e", red:"#ff3b3b", green:"#39ff14", teal:"#7cff9e", screenglow:"#57ff6b" },
+    { cyan:"#00e0ff", magenta:"#ff8a00", purple:"#5ea3ff", yellow:"#ffd166", red:"#ff4d4d", green:"#ffb703", teal:"#33c2ff", screenglow:"#ffb703" },
+  ];
+  let themeIndex = 0;
+  function applyTheme(i){
+    const t = THEMES[i];
+    const root = document.documentElement.style;
+    root.setProperty("--cyan", t.cyan);
+    root.setProperty("--magenta", t.magenta);
+    root.setProperty("--purple", t.purple);
+    root.setProperty("--yellow", t.yellow);
+    root.setProperty("--red", t.red);
+    root.setProperty("--green", t.green);
+    root.setProperty("--teal", t.teal);
+    root.setProperty("--screen-glow", t.screenglow);
+  }
+
+  /* ============ SOUND ============ */
+  function beep(freq, dur){
+    if(!soundOn) return;
+    try{
+      if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.value = freq || 760;
+      gain.gain.setValueAtTime(0.045, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + (dur||0.045));
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + (dur||0.045));
+    } catch(e){ /* audio unavailable, ignore */ }
+  }
+
+  /* ============ MATH ENGINE ============ */
+  function tag(err, kind){ err.kind = kind; return err; }
+  function toRad(x, mode){ return mode==="DEG" ? x*Math.PI/180 : mode==="GRA" ? x*Math.PI/200 : x; }
+  function fromRad(x, mode){ return mode==="DEG" ? x*180/Math.PI : mode==="GRA" ? x*200/Math.PI : x; }
+
+  function factorial(n){
+    if(n < 0 || Math.abs(n-Math.round(n)) > 1e-9) throw tag(new Error("fact"), "math");
+    n = Math.round(n);
+    if(n > 170) return Infinity;
+    let r = 1;
+    for(let i=2;i<=n;i++) r *= i;
+    return r;
+  }
+  function nPr(n,r){ n=Math.round(n); r=Math.round(r); if(r>n||r<0) throw tag(new Error("range"),"math"); return factorial(n)/factorial(n-r); }
+  function nCr(n,r){ n=Math.round(n); r=Math.round(r); if(r>n||r<0) throw tag(new Error("range"),"math"); return factorial(n)/(factorial(r)*factorial(n-r)); }
+
+  function autoClose(str){
+    let open = 0;
+    for(const ch of str){ if(ch==="(") open++; else if(ch===")") open = Math.max(0, open-1); }
+    return str + ")".repeat(open);
+  }
+
+  const FUNC_NAMES = "asin|acos|atan|sin|cos|tan|sqrt|cbrt|log|ln|abs|nPr|nCr|nthroot|pol|rec|ran";
+  const TOKEN_RE = new RegExp(
+    "(\\d+\\.?\\d*|\\.\\d+)" +           // 1 number
+    "|(" + FUNC_NAMES + ")" +            // 2 function (word form)
+    "|(\u221A|\u221B)" +                 // 3 radical symbols -> sqrt/cbrt
+    "|(Ans|\u03C0|e|X)" +                // 4 const/var/ans
+    "|([+\\-*/^])" +                     // 5 binary op
+    "|(\\()" +                           // 6 lparen
+    "|(\\))" +                           // 7 rparen
+    "|(,)" +                             // 8 comma
+    "|(!)" +                             // 9 factorial
+    "|(%)",                              // 10 percent
+    "g"
+  );
+
+  function tokenize(str){
+    const tokens = [];
+    let m;
+    TOKEN_RE.lastIndex = 0;
+    while((m = TOKEN_RE.exec(str))){
+      if(m[1] !== undefined) tokens.push({type:"num", v:parseFloat(m[1])});
+      else if(m[2] !== undefined) tokens.push({type:"func", v:m[2]});
+      else if(m[3] !== undefined) tokens.push({type:"func", v: m[3]==="\u221A" ? "sqrt" : "cbrt"});
+      else if(m[4] !== undefined) tokens.push({type:"const", v:m[4]});
+      else if(m[5] !== undefined) tokens.push({type:"op", v:m[5]});
+      else if(m[6] !== undefined) tokens.push({type:"lparen", v:"("});
+      else if(m[7] !== undefined) tokens.push({type:"rparen", v:")"});
+      else if(m[8] !== undefined) tokens.push({type:"comma", v:","});
+      else if(m[9] !== undefined) tokens.push({type:"fact", v:"!"});
+      else if(m[10] !== undefined) tokens.push({type:"pct", v:"%"});
+    }
+    return tokens;
+  }
+
+  function insertImplicitMul(tokens){
+    const out = [];
+    const ends = new Set(["num","const","rparen","fact","pct"]);
+    const starts = new Set(["num","const","func","lparen"]);
+    for(let i=0;i<tokens.length;i++){
+      out.push(tokens[i]);
+      const nxt = tokens[i+1];
+      if(nxt && ends.has(tokens[i].type) && starts.has(nxt.type)){
+        out.push({type:"op", v:"*"});
+      }
+    }
+    return out;
+  }
+
+  function peek(p){ return p.tokens[p.pos]; }
+  function advance(p){ return p.tokens[p.pos++]; }
+  function expect(p, type){ const t = advance(p); if(!t || t.type !== type) throw tag(new Error("syntax"),"syntax"); return t; }
+
+  function parseExpression(p){
+    let left = parseTerm(p);
+    while(peek(p) && peek(p).type==="op" && (peek(p).v==="+"||peek(p).v==="-")){
+      const op = advance(p).v;
+      const right = parseTerm(p);
+      left = {t:"bin", op, l:left, r:right};
+    }
+    return left;
+  }
+  function parseTerm(p){
+    let left = parseUnary(p);
+    while(peek(p) && peek(p).type==="op" && (peek(p).v==="*"||peek(p).v==="/")){
+      const op = advance(p).v;
+      const right = parseUnary(p);
+      left = {t:"bin", op, l:left, r:right};
+    }
+    return left;
+  }
+  function parseUnary(p){
+    if(peek(p) && peek(p).type==="op" && peek(p).v==="-"){
+      advance(p);
+      const v = parseUnary(p);
+      return {t:"un", op:"-", v};
+    }
+    return parsePower(p);
+  }
+  function parsePower(p){
+    let left = parsePostfix(p);
+    if(peek(p) && peek(p).type==="op" && peek(p).v==="^"){
+      advance(p);
+      const right = parseUnary(p);
+      left = {t:"bin", op:"^", l:left, r:right};
+    }
+    return left;
+  }
+  function parsePostfix(p){
+    let left = parsePrimary(p);
+    while(peek(p) && (peek(p).type==="fact" || peek(p).type==="pct")){
+      const tk = advance(p);
+      left = {t:"post", op: tk.type==="fact" ? "!" : "%", v:left};
+    }
+    return left;
+  }
+  function parsePrimary(p){
+    const tok = peek(p);
+    if(!tok) throw tag(new Error("syntax"),"syntax");
+    if(tok.type==="num"){ advance(p); return {t:"num", v:tok.v}; }
+    if(tok.type==="const"){
+      advance(p);
+      if(tok.v==="Ans") return {t:"ans"};
+      if(tok.v==="\u03C0") return {t:"const", name:"pi"};
+      if(tok.v==="e") return {t:"const", name:"e"};
+      if(tok.v==="X") return {t:"var"};
+    }
+    if(tok.type==="func"){
+      advance(p);
+      expect(p,"lparen");
+      let args = [];
+      if(!(peek(p) && peek(p).type==="rparen")){
+        args.push(parseExpression(p));
+        while(peek(p) && peek(p).type==="comma"){ advance(p); args.push(parseExpression(p)); }
+      }
+      expect(p,"rparen");
+      return {t:"func", name:tok.v, args};
+    }
+    if(tok.type==="lparen"){
+      advance(p);
+      const e = parseExpression(p);
+      expect(p,"rparen");
+      return e;
+    }
+    throw tag(new Error("syntax"),"syntax");
+  }
+
+  function evalNode(n, ctx){
+    switch(n.t){
+      case "num": return n.v;
+      case "const": return n.name==="pi" ? Math.PI : Math.E;
+      case "var": return ctx.xVar;
+      case "ans": return ctx.ans;
+      case "un": { const v=evalNode(n.v,ctx); return n.op==="-" ? -v : v; }
+      case "post": {
+        const v = evalNode(n.v,ctx);
+        if(n.op==="!") return factorial(v);
+        if(n.op==="%") return v/100;
+        break;
+      }
+      case "bin": {
+        const l = evalNode(n.l,ctx), r = evalNode(n.r,ctx);
+        switch(n.op){
+          case "+": return l+r;
+          case "-": return l-r;
+          case "*": return l*r;
+          case "/": if(r===0) throw tag(new Error("div0"),"math"); return l/r;
+          case "^": return Math.pow(l,r);
+        }
+        break;
+      }
+      case "func": {
+        const a = n.args.map(x => evalNode(x,ctx));
+        switch(n.name){
+          case "sin": return Math.sin(toRad(a[0], ctx.angleMode));
+          case "cos": return Math.cos(toRad(a[0], ctx.angleMode));
+          case "tan": {
+  const angle = toRad(a[0], ctx.angleMode);
+  const cosVal = Math.cos(angle);
+  if (Math.abs(cosVal) < 1e-10) throw tag(new Error("domain"), "math");
+  return Math.tan(angle);
+}
+          case "asin": if(a[0]<-1||a[0]>1) throw tag(new Error("domain"),"math"); return fromRad(Math.asin(a[0]), ctx.angleMode);
+          case "acos": if(a[0]<-1||a[0]>1) throw tag(new Error("domain"),"math"); return fromRad(Math.acos(a[0]), ctx.angleMode);
+          case "atan": return fromRad(Math.atan(a[0]), ctx.angleMode);
+          case "log": return a.length>1 ? Math.log(a[0])/Math.log(a[1]) : Math.log10(a[0]);
+          case "ln": return Math.log(a[0]);
+          case "sqrt": if(a[0]<0) throw tag(new Error("neg"),"math"); return Math.sqrt(a[0]);
+          case "cbrt": return Math.cbrt(a[0]);
+          case "abs": return Math.abs(a[0]);
+          case "nPr": return nPr(a[0],a[1]);
+          case "nCr": return nCr(a[0],a[1]);
+          case "nthroot": return Math.pow(a[1], 1/a[0]);
+          case "pol": return Math.hypot(a[0], a[1]);
+          case "rec": return fromRad(Math.atan2(a[1], a[0]), ctx.angleMode);
+          case "ran": return Math.random();
+        }
+        break;
+      }
+    }
+    throw tag(new Error("eval"),"math");
+  }
+
+  function evaluateExpr(str){
+    if(str.trim()==="") throw tag(new Error("empty"),"syntax");
+    const balanced = autoClose(str);
+    const rawTokens = tokenize(balanced);
+    if(rawTokens.length===0) throw tag(new Error("empty"),"syntax");
+    const tokens = insertImplicitMul(rawTokens);
+    const p = {tokens, pos:0};
+    const ast = parseExpression(p);
+    if(p.pos < tokens.length) throw tag(new Error("syntax"),"syntax");
+    const val = evalNode(ast, {angleMode, ans, xVar});
+    if(typeof val !== "number" || !isFinite(val)) throw tag(new Error("math"),"math");
+    return val;
+  }
+
+  /* ============ FORMATTING ============ */
+  function formatScientific(num){
+    if(Object.is(num,-0)) num = 0;
+    if(Math.abs(num) < 1e-12) num = 0;
+    if(num === 0) return { html: "0", plain: "0" };
+
+    const absN = Math.abs(num);
+    let exp = Math.floor(Math.log10(absN));
+    let mant = num / Math.pow(10, exp);
+    mant = parseFloat(mant.toPrecision(10));
+    if(Math.abs(mant) >= 10){ mant/=10; exp+=1; }
+    return { html: mant.toString() + "×10<sup>" + exp + "</sup>", plain: mant.toString() + "e" + exp };
+  }
+
+  function formatResultParts(num){
+    if(Object.is(num,-0)) num = 0;
+    if(Math.abs(num) < 1e-12) num = 0;
+    const absN = Math.abs(num);
+    if(num !== 0 && (absN >= 1e10 || absN < 1e-9)){
+      let exp = Math.floor(Math.log10(absN));
+      let mant = num / Math.pow(10, exp);
+      mant = parseFloat(mant.toPrecision(10));
+      if(Math.abs(mant) >= 10){ mant/=10; exp+=1; }
+      return { html: mant.toString() + "\u00D710<sup>" + exp + "</sup>", plain: mant.toString() + "e" + exp };
+    }
+    const s = parseFloat(num.toPrecision(10)).toString();
+    return { html: s, plain: s };
+  }
+
+  function toFraction(x){
+    const sign = x<0 ? -1 : 1;
+    x = Math.abs(x);
+    const tolerance = 1e-9;
+    let h1=1,h2=0,k1=0,k2=1,b=x;
+    let iter=0;
+    do{
+      const a = Math.floor(b);
+      let aux=h1; h1=a*h1+h2; h2=aux;
+      aux=k1; k1=a*k1+k2; k2=aux;
+      if(b-a < 1e-12) break;
+      b = 1/(b-a);
+      iter++;
+    } while(Math.abs(x-h1/k1) > x*tolerance && k1 < 1e7 && iter<40);
+    return {num: sign*h1, den: k1};
+  }
+  function formatFraction(num){
+    if(Number.isInteger(num)) return num.toString();
+    const f = toFraction(num);
+    if(f.den===1) return f.num.toString();
+    const whole = Math.trunc(f.num/f.den);
+    const rem = Math.abs(f.num - whole*f.den);
+    if(whole !== 0 && rem !== 0) return whole + " " + rem + "\u2044" + f.den;
+    if(whole === 0) return f.num + "\u2044" + f.den;
+    return whole.toString();
+  }
+
+  function formatScientific(num){
+    if(Object.is(num,-0)) num = 0;
+    if(Math.abs(num) < 1e-12) num = 0;
+    if(num === 0) return { html: "0", plain: "0" };
+    const absN = Math.abs(num);
+    let exp = Math.floor(Math.log10(absN));
+    let mant = num / Math.pow(10, exp);
+    mant = parseFloat(mant.toPrecision(10));
+    if(Math.abs(mant) >= 10){ mant/=10; exp+=1; }
+    return { html: mant.toString() + "\u00D710<sup>" + exp + "</sup>", plain: mant.toString() + "e" + exp };
+  }
+
+  function formatDMS(val){
+    const sign = val<0 ? -1 : 1;
+    val = Math.abs(val);
+    const d = Math.floor(val);
+    const mFull = (val-d)*60;
+    const m = Math.floor(mFull);
+    let s = (mFull-m)*60;
+    s = Math.round(s*100)/100;
+    if(s>=60){ s-=60; }
+    return (sign<0?"-":"") + d + "\u00B0" + m + "'" + s + '"';
+  }
+
+  function prettify(s){
+    // Replace * with \u00D7, / with \u00F7, - with minus sign
+    let result = s.replace(/\*/g,"\u00D7").replace(/\//g,"\u00F7").replace(/-/g,"\u2212");
+    // Replace ^ followed by digits with superscript digits
+    return result.replace(/\^(\d+)/g, (match, digits) => {
+        const superscriptMap = {
+            '0': '\u2070', '1': '\u00B9', '2': '\u00B2', '3': '\u00B3',
+            '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077',
+            '8': '\u2078', '9': '\u2079'
+        };
+        return digits.split('').map(d => superscriptMap[d] || d).join('');
+    });
+  }
+
+  /* ============ DISPLAY ============ */
+  function updateDisplay(){
+    const before = prettify(expr.slice(0,cursorPos));
+    const after = prettify(expr.slice(cursorPos));
+    lineTop.innerHTML = (before || after) ? (before + '<span class="caret"></span>' + after) : "";
+    indShift.classList.toggle("active", shiftActive);
+    indAlpha.classList.toggle("active", alphaActive);
+    indM.classList.toggle("active", memory !== 0);
+    indMode.textContent = angleMode;
+    document.querySelector(".key-shift").classList.toggle("on", shiftActive);
+    document.querySelector(".key-alpha").classList.toggle("on", alphaActive);
+  }
+
+  function renderResult(val){
+    lineBottom.classList.remove("err");
+    let html, plain;
+    if(displayFormat==="frac"){ plain = formatFraction(val); html = plain; }
+    else if(displayFormat==="dms"){ plain = formatDMS(val); html = plain; }
+    else if(displayFormat==="sci"){ const parts = formatScientific(val); html = parts.html; plain = parts.plain; }
+    else { const parts = formatResultParts(val); html = parts.html; plain = parts.plain; }
+    lineBottom.innerHTML = html;
+    lastRenderedPlainText = plain;
+  }
+
+  function showError(kind){
+    lineBottom.classList.add("err");
+    lineBottom.textContent = kind === "syntax" ? "Syntax ERROR" : "Math ERROR";
+    lastRenderedPlainText = lineBottom.textContent;
+    lastResultValue = null;
+    beep(220, 0.09);
+  }
+
+  /* ============ ACTIONS ============ */
+  function insert(text){
+    expr = expr.slice(0,cursorPos) + text + expr.slice(cursorPos);
+    cursorPos += text.length;
+  }
+  function insertFresh(text){
+    if(justEvaluated){ expr=""; cursorPos=0; justEvaluated=false; }
+    insert(text);
+  }
+  function insertOperator(op){
+    if(justEvaluated){ expr="Ans"; cursorPos=expr.length; justEvaluated=false; }
+    insert(op);
+  }
+  function doDelete(){
+    if(cursorPos>0){
+      expr = expr.slice(0,cursorPos-1) + expr.slice(cursorPos);
+      cursorPos -= 1;
+    }
+    justEvaluated = false;
+  }
+  function doClearAll(){
+    expr = ""; cursorPos = 0; justEvaluated = false;
+    displayFormat = "dec";
+    lineBottom.classList.remove("err");
+    lineBottom.textContent = "0";
+    lastRenderedPlainText = "0";
+    lastResultValue = null;
+    historyIndex = history.length;
+  }
+  function cycleDRG(){
+    angleMode = angleMode==="DEG" ? "RAD" : angleMode==="RAD" ? "GRA" : "DEG";
+  }
+  function currentValueOrAns(){
+    if(expr.trim()==="") return ans;
+    return evaluateExpr(expr);
+  }
+  function doMemoryOp(sign){
+    try{
+      const v = currentValueOrAns();
+      memory += sign*v;
+    } catch(e){ showError(e.kind); }
+  }
+  function doStore(){
+    try{
+      xVar = currentValueOrAns();
+    } catch(e){ showError(e.kind); }
+  }
+  function toggleFormat(fmt){
+    if(lastResultValue===null) return;
+    displayFormat = (displayFormat === fmt) ? "dec" : fmt;
+    renderResult(lastResultValue);
+  }
+
+  function cycleSDFormat(){
+    if(lastResultValue===null) return;
+    // Cycle through: dec -> frac -> sci -> dec
+    const formats = ["dec", "frac", "sci"];
+    let currentIndex = formats.indexOf(displayFormat);
+    if(currentIndex === -1) currentIndex = 0; // default to dec if not found
+    let nextIndex = (currentIndex + 1) % formats.length;
+    displayFormat = formats[nextIndex];
+    renderResult(lastResultValue);
+  }
+  function doEvaluate(){
+    try{
+      const val = evaluateExpr(expr);
+      ans = val;
+      lastResultValue = val;
+      displayFormat = "dec";
+      renderResult(val);
+      justEvaluated = true;
+      history.push({expr, val});
+      if(history.length>30) history.shift();
+      historyIndex = history.length;
+      renderHistoryPanel();
+      beep(1080, 0.06);
+    } catch(e){
+      showError(e.kind);
+      justEvaluated = false;
+    }
+  }
+  function formatPlain(num){
+    return parseFloat(num.toPrecision(12)).toString();
+  }
+  function loadHistory(){
+    const h = history[historyIndex];
+    if(!h) return;
+    expr = h.expr;
+    cursorPos = expr.length;
+    justEvaluated = false;
+    displayFormat = "dec";
+    lastResultValue = h.val;
+    renderResult(h.val);
+  }
+  function historyUp(){
+    if(history.length===0) return;
+    historyIndex = Math.max(0, historyIndex-1);
+    loadHistory();
+  }
+  function historyDown(){
+    if(history.length===0) return;
+    if(historyIndex < history.length-1){
+      historyIndex++;
+      loadHistory();
+    } else {
+      historyIndex = history.length;
+      expr = ""; cursorPos = 0; justEvaluated = false;
+    }
+  }
+
+  /* ============ HISTORY PANEL (desktop mode) ============ */
+  function renderHistoryPanel(){
+    if(!historyList) return;
+    historyList.innerHTML = "";
+    if(history.length===0){
+      const empty = document.createElement("div");
+      empty.className = "history-empty";
+      empty.textContent = "No calculations yet — press = to start a log.";
+      historyList.appendChild(empty);
+      return;
+    }
+    history.forEach((h, i) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "history-item";
+      const exprSpan = document.createElement("span");
+      exprSpan.className = "h-expr";
+      exprSpan.textContent = prettify(h.expr) + " =";
+      const valSpan = document.createElement("span");
+      valSpan.className = "h-val";
+      valSpan.textContent = formatResultParts(h.val).plain;
+      item.appendChild(exprSpan);
+      item.appendChild(valSpan);
+      item.addEventListener("click", () => {
+        historyIndex = i;
+        loadHistory();
+        beep(760,0.03);
+      });
+      historyList.appendChild(item);
+    });
+    historyList.scrollTop = historyList.scrollHeight;
+  }
+
+  function press(key){
+    if(key === "shift"){ shiftActive = !shiftActive; alphaActive = false; beep(920,0.03); updateDisplay(); return; }
+    if(key === "alpha"){ alphaActive = !alphaActive; shiftActive = false; beep(920,0.03); updateDisplay(); return; }
+
+    beep(760, 0.035);
+
+    switch(key){
+      case "0": case "1": case "2": case "3": case "4":
+      case "5": case "6": case "7": case "8": case "9":
+        insertFresh(key); break;
+      case "dot": insertFresh("."); break;
+      case "add": insertOperator("+"); break;
+      case "sub": insertOperator("-"); break;
+      case "mul": insertOperator("*"); break;
+      case "div": insertOperator("/"); break;
+      case "lparen": insertFresh("("); break;
+      case "rparen": insertFresh(")"); break;
+      case "comma": insertFresh(","); break;
+      case "pct": insertFresh("%"); break;
+      case "fact": insertFresh("!"); break;
+      case "pi": insertFresh("\u03C0"); break;
+      case "e": insertFresh("e"); break;
+      case "ans": insertFresh("Ans"); break;
+      case "xvar":
+        if(shiftActive){ doStore(); }
+        else insertFresh("X");
+        break;
+      case "sq": insertFresh(shiftActive ? "^3" : "^2"); break;
+      case "sqrt": insertFresh(shiftActive ? "cbrt(" : "\u221A("); break;
+      case "pow": insertFresh(shiftActive ? "nthroot(" : "^"); break;
+      case "inv": insertFresh("^(-1)"); break;
+      case "log": insertFresh(shiftActive ? "10^(" : "log("); break;
+      case "ln": insertFresh(shiftActive ? "e^(" : "ln("); break;
+      case "sin": insertFresh(shiftActive ? "asin(" : "sin("); break;
+      case "cos": insertFresh(shiftActive ? "acos(" : "cos("); break;
+      case "tan": insertFresh(shiftActive ? "atan(" : "tan("); break;
+      case "ncr": insertFresh("nCr("); break;
+      case "npr": insertFresh("nPr("); break;
+      case "exp": insertFresh("*10^("); break;
+      case "neg": insertFresh("-"); break;
+      case "del": doDelete(); break;
+      case "ac": doClearAll(); break;
+      case "left": cursorPos = Math.max(0, cursorPos-1); break;
+      case "right": cursorPos = Math.min(expr.length, cursorPos+1); break;
+      case "format":
+        // Cycle through all formats: dec -> frac -> sci -> dms -> dec
+        if(displayFormat === "dec") {
+          displayFormat = "frac";
+        } else if(displayFormat === "frac") {
+          displayFormat = "sci";
+        } else if(displayFormat === "sci") {
+          displayFormat = "dms";
+        } else {
+          displayFormat = "dec";
+        }
+        if(lastResultValue !== null) {
+          renderResult(lastResultValue);
+        }
+        break;
+      case "drg": cycleDRG(); break;
+      case "mc": memory = 0; break;
+      case "mr": insertFresh(formatPlain(memory)); break;
+      case "mplus": doMemoryOp(1); break;
+      case "mminus": doMemoryOp(-1); break;
+      case "sd":
+        if(shiftActive){
+          toggleFormat("dms");
+        } else {
+          cycleSDFormat();
+        }
+        break;
+      case "dms": toggleFormat("dms"); break;
+      case "abs": insertFresh("abs("); break;
+      case "ran": insertFresh("ran()"); break;
+      case "pol": insertFresh(shiftActive ? "rec(" : "pol("); break;
+      case "eq": doEvaluate(); break;
+    }
+
+    shiftActive = false;
+    alphaActive = false;
+    updateDisplay();
+  }
+
+  /* ============ KEYPAD BUILD ============ */
+  const FUNC_ROWS = [
+    [
+      {k:"shift", label:"SHIFT", cls:"key-shift"},
+      {k:"alpha", label:"ALPHA", cls:"key-alpha"},
+      {k:"left", label:"\u25C0", cls:"key-nav"},
+      {k:"right", label:"\u25B6", cls:"key-nav"},
+      {k:"histup", label:"\u25B2", cls:"key-nav"},
+      {k:"histdown", label:"\u25BC", cls:"key-nav"},
+    ],
+    [
+      {k:"drg", label:"DRG", cls:"key-nav"},
+      {k:"inv", label:"x\u207B\u00B9", cls:"key-func"},
+      {k:"sq", label:"x\u00B2", shift:"x\u00B3", cls:"key-func"},
+      {k:"sqrt", label:"\u221A", shift:"\u221B", cls:"key-func"},
+      {k:"pow", label:"x^y", shift:"\u02B8\u221Ax", cls:"key-func"},
+      {k:"log", label:"log", shift:"10^x", cls:"key-func"},
+    ],
+    [
+      {k:"ln", label:"ln", shift:"e^x", cls:"key-func"},
+      {k:"lparen", label:"(", cls:"key-op2"},
+      {k:"rparen", label:")", cls:"key-op2"},
+      {k:"comma", label:",", cls:"key-op2"},
+      {k:"pct", label:"%", cls:"key-op2"},
+      {k:"dms", label:"\u00B0'\"", cls:"key-op2"},
+    ],
+    [
+      {k:"sin", label:"sin", shift:"sin\u207B\u00B9", cls:"key-func"},
+      {k:"cos", label:"cos", shift:"cos\u207B\u00B9", cls:"key-func"},
+      {k:"tan", label:"tan", shift:"tan\u207B\u00B9", cls:"key-func"},
+      {k:"pi", label:"\u03C0", cls:"key-func"},
+      {k:"e", label:"e", cls:"key-func"},
+      {k:"ran", label:"Ran#", cls:"key-func"},
+    ],
+    [
+      {k:"ncr", label:"nCr", cls:"key-func"},
+      {k:"npr", label:"nPr", cls:"key-func"},
+      {k:"xvar", label:"X", alpha:"STO", cls:"key-alpha2"},
+      {k:"ans", label:"Ans", cls:"key-func"},
+      {k:"fact", label:"x!", cls:"key-func"},
+      {k:"pol", label:"Pol(", shift:"Rec(", cls:"key-func"},
+    ],
+    [
+      {k:"mc", label:"MC", cls:"key-mem"},
+      {k:"mr", label:"MR", cls:"key-mem"},
+      {k:"mminus", label:"M\u2212", cls:"key-mem"},
+      {k:"mplus", label:"M+", cls:"key-mem"},
+      {k:"sd", label:"S\u21D4D", cls:"key-mem"},
+      {k:"abs", label:"|x|", cls:"key-mem"},
+    ],
+  ];
+  const DIGIT_ROWS = [
+    [
+      {k:"7", label:"7", cls:"key-digit"},
+      {k:"8", label:"8", cls:"key-digit"},
+      {k:"9", label:"9", cls:"key-digit"},
+      {k:"del", label:"DEL", cls:"key-clear"},
+      {k:"ac", label:"AC", cls:"key-clear"},
+    ],
+    [
+      {k:"4", label:"4", cls:"key-digit"},
+      {k:"5", label:"5", cls:"key-digit"},
+      {k:"6", label:"6", cls:"key-digit"},
+      {k:"mul", label:"\u00D7", cls:"key-op"},
+      {k:"div", label:"\u00F7", cls:"key-op"},
+    ],
+    [
+      {k:"1", label:"1", cls:"key-digit"},
+      {k:"2", label:"2", cls:"key-digit"},
+      {k:"3", label:"3", cls:"key-digit"},
+      {k:"add", label:"+", cls:"key-op"},
+      {k:"sub", label:"\u2212", cls:"key-op"},
+    ],
+    [
+      {k:"0", label:"0", cls:"key-digit"},
+      {k:"dot", label:".", cls:"key-digit"},
+      {k:"exp", label:"EXP", cls:"key-func"},
+      {k:"neg", label:"(-)", cls:"key-func"},
+      {k:"eq", label:"=", cls:"key-equals"},
+    ],
+  ];
+
+  function buildKeypad(container, rows, smallCls){
+    rows.forEach(row => {
+      row.forEach(btn => {
+        const el = document.createElement("button");
+        el.type = "button";
+        el.className = "key " + (btn.cls || "") + (smallCls ? " key-sm" : "");
+        el.dataset.key = btn.k;
+        if(btn.shift){
+          const s = document.createElement("span");
+          s.className = "shiftlabel";
+          s.textContent = btn.shift;
+          el.appendChild(s);
+        }
+        if(btn.alpha){
+          const a = document.createElement("span");
+          a.className = "alphalabel";
+          a.textContent = btn.alpha;
+          el.appendChild(a);
+        }
+        const lbl = document.createElement("span");
+        lbl.textContent = btn.label;
+        el.appendChild(lbl);
+        el.addEventListener("click", () => press(btn.k));
+        container.appendChild(el);
+      });
+    });
+  }
+  buildKeypad(document.getElementById("keypad-functions"), FUNC_ROWS, true);
+  buildKeypad(document.getElementById("keypad-digits"), DIGIT_ROWS, false);
+
+  /* ============ HEADER ICON ACTIONS ============ */
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? "\u{1F50A}" : "\u{1F507}";
+    if(soundOn) beep(760,0.04);
+  });
+  themeBtn.addEventListener("click", () => {
+    themeIndex = (themeIndex+1) % THEMES.length;
+    applyTheme(themeIndex);
+    beep(920,0.03);
+  });
+  copyBtn.addEventListener("click", () => {
+    const text = lastRenderedPlainText || "0";
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(() => flashCopy()).catch(() => flashCopy());
+    } else {
+      flashCopy();
+    }
+  });
+  function flashCopy(){
+    copyBtn.classList.add("flash");
+    copyBtn.textContent = "\u2713";
+    setTimeout(() => { copyBtn.classList.remove("flash"); copyBtn.textContent = "\u{1F4CB}"; }, 900);
+  }
+
+  /* ============ MODE TOGGLE (basic / desktop) ============ */
+  function setMode(mode){
+    currentMode = mode;
+    document.body.classList.toggle("mode-desktop", mode === "desktop");
+    modeToggle.querySelectorAll(".mode-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.mode === mode);
+    });
+    if(mode === "desktop") renderHistoryPanel();
+    beep(840, 0.03);
+  }
+  modeToggle.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".mode-btn");
+    if(!btn) return;
+    setMode(btn.dataset.mode);
+  });
+  historyClearBtn.addEventListener("click", () => {
+    history = [];
+    historyIndex = -1;
+    renderHistoryPanel();
+    beep(300, 0.05);
+  });
+
+  /* ============ KEYBOARD SUPPORT ============ */
+  window.addEventListener("keydown", (ev) => {
+    const map = {
+      "0":"0","1":"1","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9",
+      ".":"dot", "+":"add", "-":"sub", "*":"mul", "/":"div",
+      "(":"lparen", ")":"rparen", "^":"pow", "%":"pct", ",":"comma",
+      "Enter":"eq", "=":"eq", "Backspace":"del", "Escape":"ac",
+      "ArrowLeft":"left", "ArrowRight":"right",
+      "ArrowUp":"histup", "ArrowDown":"histdown",
+      "s": ev.shiftKey ? "asin" : "sin",
+      "c": ev.shiftKey ? "acos" : "cos",
+      "t": ev.shiftKey ? "atan" : "tan",
+      "l": ev.shiftKey ? "10^" : "log",
+      "n": ev.shiftKey ? "e^" : "ln",
+      "q": ev.shiftKey ? "cbrt" : "sqrt",
+      "p": "pi",
+      "e": "e",
+      "a": "ans",
+      "x": "xvar",
+      "!": "fact",
+      "f": "format"
+    };
+    const key = ev.key.toLowerCase();
+    if(map[key]){
+      if(["Enter","Backspace","ArrowUp","ArrowDown"].includes(ev.key)) ev.preventDefault();
+      press(map[key]);
+    }
+  });
+
+  applyTheme(0);
+  updateDisplay();
+  renderHistoryPanel();
+})();
+</script>
+</body>
+</html>
