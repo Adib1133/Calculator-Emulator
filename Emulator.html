@@ -232,16 +232,21 @@
   @keyframes blink{ 50%{ opacity:0; } }
 
   .keypad-functions{
-    display:grid;
-    grid-template-columns:repeat(6, 1fr);
+    display:flex;
+    flex-direction:column;
     gap:6px;
     margin-bottom:8px;
   }
   .keypad-digits{
-    display:grid;
-    grid-template-columns:repeat(5, 1fr);
+    display:flex;
+    flex-direction:column;
     gap:7px;
   }
+  .key-row{
+    display:grid;
+    gap:6px;
+  }
+  .keypad-digits .key-row{ gap:7px; }
   .key{
     all:unset;
     box-sizing:border-box;
@@ -293,6 +298,69 @@
   .key.key-clear{ --c:var(--red); font-weight:700; }
   .key.key-equals{ --c:var(--green); font-weight:800; font-size:1.05rem; background:linear-gradient(160deg,#123324,#0e1015 85%); }
   .key.key-alpha2{ --c:var(--purple); }
+  .key.key-util{ --c:var(--cyan); }
+
+  /* ============ OVERLAY / MODAL ============ */
+  .overlay{
+    position:absolute; inset:0; z-index:20;
+    background:rgba(2,4,6,0.82);
+    display:flex; align-items:center; justify-content:center;
+    border-radius:32px;
+    padding:16px;
+  }
+  .overlay[hidden]{ display:none; }
+  .overlay-panel{
+    width:100%; max-height:100%; overflow-y:auto;
+    background:linear-gradient(160deg,#161923,#0d0f14 80%);
+    border:1px solid var(--teal);
+    border-radius:18px;
+    box-shadow:0 0 26px rgba(55,230,197,0.25), inset 0 0 0 1px rgba(255,255,255,0.03);
+    padding:14px 16px 16px;
+  }
+  .overlay-title{
+    font-family:'Orbitron',sans-serif; font-size:0.72rem; letter-spacing:0.1em;
+    color:var(--teal); text-shadow:0 0 6px var(--teal); margin-bottom:10px;
+  }
+  .overlay-body{ font-size:0.72rem; color:var(--text-dim); margin-bottom:12px; }
+  .overlay-close{
+    all:unset; cursor:pointer; display:block; width:100%; text-align:center;
+    padding:8px; border-radius:10px; font-size:0.68rem; letter-spacing:0.08em;
+    color:var(--red); border:1px solid var(--red); box-shadow:0 0 8px var(--red);
+  }
+  .overlay-close:hover{ background:rgba(255,59,92,0.1); }
+
+  .setup-section{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+  .setup-label{ color:var(--yellow); font-size:0.62rem; letter-spacing:0.08em; }
+  .setup-options{ display:flex; flex-wrap:wrap; gap:6px; }
+  .setup-options button, .grid-btns button{
+    all:unset; cursor:pointer; padding:7px 10px; border-radius:10px;
+    background:linear-gradient(160deg,#20232d,#14161c 85%);
+    border:1px solid var(--cyan); color:#e8f9ff; font-size:0.66rem;
+    box-shadow:0 0 5px var(--cyan);
+  }
+  .setup-options button.active{ background:linear-gradient(160deg,var(--teal),var(--cyan)); color:#04140f; font-weight:700; }
+  .grid-btns{ display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+  .grid-btns button{ text-align:left; }
+  .grid-btns button:hover, .setup-options button:hover{ box-shadow:0 0 12px var(--cyan); }
+
+  .reset-msg{ margin-bottom:12px; line-height:1.4; }
+  .reset-actions{ display:flex; gap:8px; }
+  .reset-actions button{
+    all:unset; cursor:pointer; flex:1; text-align:center; padding:8px; border-radius:10px; font-size:0.68rem; letter-spacing:0.06em;
+  }
+  #reset-yes{ color:var(--red); border:1px solid var(--red); box-shadow:0 0 8px var(--red); }
+  #reset-no{ color:var(--text-dim); border:1px solid var(--text-dim); }
+
+  .calc-prompt{ display:flex; align-items:center; gap:8px; }
+  .calc-prompt label{ color:var(--yellow); font-size:0.75rem; }
+  .calc-prompt input{
+    flex:1; min-width:0; background:#01100b; border:1px solid var(--teal); border-radius:8px;
+    color:#eafff5; font-family:'JetBrains Mono',monospace; font-size:0.85rem; padding:6px 8px;
+  }
+  .calc-prompt button{
+    all:unset; cursor:pointer; padding:8px 12px; border-radius:10px; font-size:0.68rem;
+    color:var(--green); border:1px solid var(--green); box-shadow:0 0 8px var(--green);
+  }
 
   @media (prefers-reduced-motion: reduce){
     .calculator::before{ animation:none; }
@@ -338,6 +406,14 @@
         <div class="keypad-functions" id="keypad-functions"></div>
         <div class="keypad-digits" id="keypad-digits"></div>
         <div class="hint">tip: <b>ʸ√x</b> = nthroot(root,value) · <b>log</b> = log(x,base) · <b>Pol/Rec</b> = (x,y) → r / θ · ▲▼ replay history</div>
+
+        <div class="overlay" id="overlay" hidden>
+          <div class="overlay-panel">
+            <div class="overlay-title" id="overlay-title"></div>
+            <div class="overlay-body" id="overlay-body"></div>
+            <button class="overlay-close" id="overlay-close" type="button">CLOSE</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -354,6 +430,7 @@
 <script>
 (function(){
   "use strict";
+  console.log("Calculator script started");
 
   /* ============ STATE ============ */
   let expr = "";
@@ -367,13 +444,14 @@
 
   let justEvaluated = false;
   let lastResultValue = null;
-  let displayFormat = "dec"; // dec, frac, dms, sci
+  let displayFormat = "dec"; // dec, frac, dms, sci, eng
   let history = []; // {expr, val}
   let historyIndex = -1;
   let soundOn = true;
   let audioCtx = null;
   let lastRenderedPlainText = "0";
   let currentMode = "basic";
+let errorTooltip = null;
 
   const lineTop = document.getElementById("line-top");
   const lineBottom = document.getElementById("line-bottom");
@@ -387,6 +465,27 @@
   const modeToggle = document.getElementById("mode-toggle");
   const historyList = document.getElementById("history-list");
   const historyClearBtn = document.getElementById("history-clear");
+  const overlay = document.getElementById("overlay");
+  const overlayTitle = document.getElementById("overlay-title");
+  const overlayBody = document.getElementById("overlay-body");
+  const overlayCloseBtn = document.getElementById("overlay-close");
+
+  // Tooltip for error messages
+  errorTooltip = document.createElement('div');
+  errorTooltip.style.position = 'fixed';
+  errorTooltip.style.bottom = '20px';
+  errorTooltip.style.left = '50%';
+  errorTooltip.style.transform = 'translateX(-50%)';
+  errorTooltip.style.background = 'rgba(0,0,0,0.8)';
+  errorTooltip.style.color = '#fff';
+  errorTooltip.style.padding = '8px 12px';
+  errorTooltip.style.borderRadius = '4px';
+  errorTooltip.style.fontSize = '0.9rem';
+  errorTooltip.style.zIndex = '1000';
+  errorTooltip.style.opacity = '0';
+  errorTooltip.style.transition = 'opacity 0.2s';
+  errorTooltip.style.pointerEvents = 'none';
+  document.body.appendChild(errorTooltip);
 
   /* ============ THEMES ============ */
   const THEMES = [
@@ -448,7 +547,11 @@
     return str + ")".repeat(open);
   }
 
-  const FUNC_NAMES = "asin|acos|atan|sin|cos|tan|sqrt|cbrt|log|ln|abs|nPr|nCr|nthroot|pol|rec|ran";
+  // NOTE: longer/more-specific names MUST come before their shorter prefixes
+  // (e.g. "asinh" before "asin" before "sin"), otherwise the regex engine
+  // matches the shorter alternative first and silently drops the remaining
+  // letters, corrupting sinh/cosh/tanh/asinh/acosh/atanh entirely.
+  const FUNC_NAMES = "asinh|acosh|atanh|asin|acos|atan|sinh|cosh|tanh|sin|cos|tan|nthroot|sqrt|cbrt|log|ln|abs|nPr|nCr|pol|rec|ran|mod";
   const TOKEN_RE = new RegExp(
     "(\\d+\\.?\\d*|\\.\\d+)" +           // 1 number
     "|(" + FUNC_NAMES + ")" +            // 2 function (word form)
@@ -623,6 +726,13 @@
           case "pol": return Math.hypot(a[0], a[1]);
           case "rec": return fromRad(Math.atan2(a[1], a[0]), ctx.angleMode);
           case "ran": return Math.random();
+          case "sinh": return Math.sinh(a[0]);
+          case "cosh": return Math.cosh(a[0]);
+          case "tanh": return Math.tanh(a[0]);
+          case "asinh": return Math.asinh(a[0]);
+          case "acosh": if (a[0] < 1) throw tag(new Error("domain"),"math"); return Math.acosh(a[0]);
+          case "atanh": if (a[0] <= -1 || a[0] >= 1) throw tag(new Error("domain"),"math"); return Math.atanh(a[0]);
+          case "mod": if (a[1] === 0) throw tag(new Error("div0"),"math"); return a[0] % a[1];
         }
         break;
       }
@@ -657,6 +767,43 @@
     if(Math.abs(mant) >= 10){ mant/=10; exp+=1; }
     return { html: mant.toString() + "×10<sup>" + exp + "</sup>", plain: mant.toString() + "e" + exp };
   }
+
+  function formatEngineering(num){
+    if(Object.is(num,-0)) num = 0;
+    if(Math.abs(num) < 1e-12) num = 0;
+    if(num === 0) return { html: "0", plain: "0" };
+    const sign = num < 0 ? "-" : "";
+    const absN = Math.abs(num);
+    let exp = Math.floor(Math.log10(absN));
+    // Adjust exponent to multiple of 3
+    let engExp = Math.floor(exp / 3) * 3;
+    let mant = num / Math.pow(10, engExp);
+    // Normalize mantissa to be in [1,1000)
+    while (Math.abs(mant) >= 1000) {
+        mant /= 1000;
+        engExp += 3;
+    }
+    while (Math.abs(mant) < 1) {
+        mant *= 1000;
+        engExp -= 3;
+    }
+    // Format mantissa with up to 10 significant digits, strip unnecessary zeros
+    mant = parseFloat(mant.toPrecision(10));
+    let mantissaStr = mant.toString();
+    if (mantissaStr.includes('.')) {
+        mantissaStr = mantissaStr.replace(/\.?0+$/, '');
+        if (mantissaStr.endsWith('.')) {
+            mantissaStr = mantissaStr.slice(0, -1);
+        }
+    }
+    const siPrefixes = {
+        '-15': 'f', '-12': 'p', '-9': 'n', '-6': 'µ', '-3': 'm',
+        '0': '', '3': 'k', '6': 'M', '9': 'G', '12': 'T', '15': 'P', '18': 'E'
+    };
+    const prefix = siPrefixes[engExp] || '';
+    const result = sign + mantissaStr + prefix;
+    return { html: result, plain: result };
+}
 
   function formatResultParts(num){
     if(Object.is(num,-0)) num = 0;
@@ -727,14 +874,21 @@
   function prettify(s){
     // Replace * with \u00D7, / with \u00F7, - with minus sign
     let result = s.replace(/\*/g,"\u00D7").replace(/\//g,"\u00F7").replace(/-/g,"\u2212");
-    // Replace ^ followed by digits with superscript digits
-    return result.replace(/\^(\d+)/g, (match, digits) => {
+    // Replace ^ optionally followed by minus sign and digits with superscript (including superscript minus)
+    return result.replace(/\^(-?\d+)/g, (match, num) => {
+        let sign = '';
+        let digits = num;
+        if (num.startsWith('-')) {
+            sign = '\u207B'; // superscript minus
+            digits = num.slice(1);
+        }
         const superscriptMap = {
             '0': '\u2070', '1': '\u00B9', '2': '\u00B2', '3': '\u00B3',
             '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077',
             '8': '\u2078', '9': '\u2079'
         };
-        return digits.split('').map(d => superscriptMap[d] || d).join('');
+        const superDigits = digits.split('').map(d => superscriptMap[d] || d).join('');
+        return sign + superDigits;
     });
   }
 
@@ -757,15 +911,26 @@
     if(displayFormat==="frac"){ plain = formatFraction(val); html = plain; }
     else if(displayFormat==="dms"){ plain = formatDMS(val); html = plain; }
     else if(displayFormat==="sci"){ const parts = formatScientific(val); html = parts.html; plain = parts.plain; }
+    else if(displayFormat==="eng"){ const parts = formatEngineering(val); html = parts.html; plain = parts.plain; }
     else { const parts = formatResultParts(val); html = parts.html; plain = parts.plain; }
     lineBottom.innerHTML = html;
     lastRenderedPlainText = plain;
   }
 
   function showError(kind){
+    const message = kind === "syntax" ? "Syntax ERROR" : "Math ERROR";
+    // Show tooltip
+    if (errorTooltip) {
+        errorTooltip.textContent = message;
+        errorTooltip.style.opacity = '1';
+        clearTimeout(errorTooltip._hideTimeout);
+        errorTooltip._hideTimeout = setTimeout(() => {
+            errorTooltip.style.opacity = '0';
+        }, 2000);
+    }
     lineBottom.classList.add("err");
-    lineBottom.textContent = kind === "syntax" ? "Syntax ERROR" : "Math ERROR";
-    lastRenderedPlainText = lineBottom.textContent;
+    lineBottom.textContent = message;
+    lastRenderedPlainText = message;
     lastResultValue = null;
     beep(220, 0.09);
   }
@@ -825,7 +990,7 @@
 
   function cycleSDFormat(){
     if(lastResultValue===null) return;
-    // Cycle through: dec -> frac -> sci -> dec
+    // Cycle through: dec -> frac -> sci -> dec (for SD button)
     const formats = ["dec", "frac", "sci"];
     let currentIndex = formats.indexOf(displayFormat);
     if(currentIndex === -1) currentIndex = 0; // default to dec if not found
@@ -913,6 +1078,242 @@
     historyList.scrollTop = historyList.scrollHeight;
   }
 
+  /* ============ OVERLAY / MODAL SYSTEM ============ */
+  function showOverlay(title, bodyHtml){
+    overlayTitle.textContent = title;
+    overlayBody.innerHTML = bodyHtml;
+    overlay.hidden = false;
+  }
+  function closeOverlay(){
+    overlay.hidden = true;
+    overlayBody.innerHTML = "";
+  }
+  overlayCloseBtn.addEventListener("click", closeOverlay);
+  overlay.addEventListener("click", (ev) => { if(ev.target === overlay) closeOverlay(); });
+
+  /* ============ SETUP ============ */
+  function openSetup(){
+    showOverlay("SETUP", `
+      <div class="setup-section">
+        <div class="setup-label">Angle Unit</div>
+        <div class="setup-options" id="setup-angle">
+          <button type="button" data-v="DEG">Deg</button><button type="button" data-v="RAD">Rad</button><button type="button" data-v="GRA">Gra</button>
+        </div>
+        <div class="setup-label">Display Format</div>
+        <div class="setup-options" id="setup-fmt">
+          <button type="button" data-v="dec">Line</button><button type="button" data-v="frac">a b/c</button><button type="button" data-v="sci">Sci</button><button type="button" data-v="eng">Eng</button><button type="button" data-v="dms">D°M'S"</button>
+        </div>
+      </div>
+    `);
+    overlayBody.querySelectorAll("#setup-angle button").forEach(b => {
+      b.classList.toggle("active", b.dataset.v === angleMode);
+      b.addEventListener("click", () => {
+        angleMode = b.dataset.v;
+        updateDisplay();
+        closeOverlay();
+        beep(880,0.03);
+      });
+    });
+    overlayBody.querySelectorAll("#setup-fmt button").forEach(b => {
+      b.classList.toggle("active", b.dataset.v === displayFormat);
+      b.addEventListener("click", () => {
+        displayFormat = b.dataset.v;
+        if(lastResultValue !== null) renderResult(lastResultValue);
+        closeOverlay();
+        beep(880,0.03);
+      });
+    });
+  }
+
+  /* ============ OPTN (engineering symbols) ============ */
+  function openOptn(){
+    const prefixes = [["T",12],["G",9],["M",6],["k",3],["m",-3],["\u00B5",-6],["n",-9],["p",-12]];
+    showOverlay("OPTN \u2014 Engineering Symbol", `
+      <div class="grid-btns">
+        ${prefixes.map(([sym,exp]) => `<button type="button" data-exp="${exp}">${sym} \u00D710<sup>${exp}</sup></button>`).join("")}
+      </div>
+    `);
+    overlayBody.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        insertFresh("*10^(" + b.dataset.exp + ")");
+        updateDisplay();
+        closeOverlay();
+        beep(880,0.03);
+      });
+    });
+  }
+
+  /* ============ CONST (scientific constants) ============ */
+  const CONSTANTS = [
+    ["c \u2014 speed of light", 2.99792458, 8],
+    ["Na \u2014 Avogadro", 6.02214076, 23],
+    ["h \u2014 Planck", 6.62607015, -34],
+    ["G \u2014 gravitation", 6.6743, -11],
+    ["e \u2014 elem. charge", 1.602176634, -19],
+    ["R \u2014 gas constant", 8.314462618, 0],
+    ["g \u2014 std gravity", 9.80665, 0],
+    ["me \u2014 electron mass", 9.1093837015, -31],
+    ["mp \u2014 proton mass", 1.67262192369, -27],
+    ["k \u2014 Boltzmann", 1.380649, -23],
+  ];
+  function openConst(){
+    showOverlay("CONST \u2014 Scientific Constants", `
+      <div class="grid-btns">
+        ${CONSTANTS.map((c,i) => `<button type="button" data-i="${i}">${c[0]}</button>`).join("")}
+      </div>
+    `);
+    overlayBody.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        const [, mant, exp] = CONSTANTS[+b.dataset.i];
+        const text = exp === 0 ? String(mant) : (mant + "*10^(" + exp + ")");
+        insertFresh(text);
+        updateDisplay();
+        closeOverlay();
+        beep(880,0.03);
+      });
+    });
+  }
+
+  /* ============ CONV (unit conversion) ============ */
+  const CONVERSIONS = [
+    ["km \u2192 mi", v => v * 0.621371],
+    ["mi \u2192 km", v => v / 0.621371],
+    ["kg \u2192 lb", v => v * 2.20462],
+    ["lb \u2192 kg", v => v / 2.20462],
+    ["\u00B0C \u2192 \u00B0F", v => v*9/5 + 32],
+    ["\u00B0F \u2192 \u00B0C", v => (v-32)*5/9],
+    ["L \u2192 gal", v => v * 0.264172],
+    ["gal \u2192 L", v => v / 0.264172],
+    ["m \u2192 ft", v => v * 3.28084],
+    ["ft \u2192 m", v => v / 3.28084],
+  ];
+  function openConv(){
+    showOverlay("CONV \u2014 Unit Conversion", `
+      <div class="grid-btns">
+        ${CONVERSIONS.map((c,i) => `<button type="button" data-i="${i}">${c[0]}</button>`).join("")}
+      </div>
+    `);
+    overlayBody.querySelectorAll("button").forEach(b => {
+      b.addEventListener("click", () => {
+        try{
+          const idx = +b.dataset.i;
+          const v = currentValueOrAns();
+          const result = CONVERSIONS[idx][1](v);
+          if(typeof result !== "number" || !isFinite(result)) throw tag(new Error("math"),"math");
+          ans = result;
+          lastResultValue = result;
+          displayFormat = "dec";
+          expr = ""; cursorPos = 0; justEvaluated = true;
+          renderResult(result);
+          history.push({expr: CONVERSIONS[idx][0] + "(" + formatPlain(v) + ")", val: result});
+          if(history.length>30) history.shift();
+          historyIndex = history.length;
+          renderHistoryPanel();
+          closeOverlay();
+          updateDisplay();
+          beep(1080,0.06);
+        } catch(e){
+          closeOverlay();
+          showError(e.kind || "math");
+        }
+      });
+    });
+  }
+
+  /* ============ RESET ============ */
+  function openResetConfirm(){
+    showOverlay("RESET", `
+      <div class="reset-msg">This clears memory, X, Ans, and calculation history, and restores default settings (Deg, Line display). Continue?</div>
+      <div class="reset-actions">
+        <button type="button" id="reset-yes">Yes, Reset</button>
+        <button type="button" id="reset-no">Cancel</button>
+      </div>
+    `);
+    document.getElementById("reset-yes").addEventListener("click", () => {
+      memory = 0; xVar = 0; ans = 0;
+      history = []; historyIndex = -1;
+      angleMode = "DEG"; displayFormat = "dec";
+      expr = ""; cursorPos = 0; justEvaluated = false; lastResultValue = null;
+      lineBottom.classList.remove("err");
+      lineBottom.textContent = "0";
+      lastRenderedPlainText = "0";
+      closeOverlay();
+      updateDisplay();
+      renderHistoryPanel();
+      beep(300,0.08);
+    });
+    document.getElementById("reset-no").addEventListener("click", closeOverlay);
+  }
+
+  /* ============ CALC / SOLVE ============ */
+  function evaluateExprWithX(str, xval){
+    const balanced = autoClose(str);
+    const rawTokens = tokenize(balanced);
+    if(rawTokens.length===0) throw tag(new Error("empty"),"syntax");
+    const tokens = insertImplicitMul(rawTokens);
+    const p = {tokens, pos:0};
+    const ast = parseExpression(p);
+    if(p.pos < tokens.length) throw tag(new Error("syntax"),"syntax");
+    const val = evalNode(ast, {angleMode, ans, xVar:xval});
+    if(typeof val !== "number" || !isFinite(val)) throw tag(new Error("math"),"math");
+    return val;
+  }
+  function doCalc(){
+    if(expr.includes("X")){
+      showOverlay("CALC \u2014 enter value for X", `
+        <div class="calc-prompt">
+          <label>X =</label>
+          <input type="number" step="any" id="calc-x-val" value="${xVar}">
+          <button type="button" id="calc-x-go">CALC</button>
+        </div>
+      `);
+      const inp = document.getElementById("calc-x-val");
+      inp.focus(); inp.select();
+      const go = () => {
+        const v = parseFloat(inp.value);
+        xVar = isFinite(v) ? v : 0;
+        closeOverlay();
+        doEvaluate();
+      };
+      document.getElementById("calc-x-go").addEventListener("click", go);
+      inp.addEventListener("keydown", (e) => { if(e.key === "Enter") go(); });
+    } else {
+      doEvaluate();
+    }
+  }
+  function doSolve(){
+    if(expr.trim()===""){ showError("syntax"); return; }
+    try{
+      const f = (x) => evaluateExprWithX(expr, x);
+      let x = xVar || 1;
+      let converged = false;
+      for(let i=0;i<100;i++){
+        const fx = f(x);
+        const h = 1e-6 * (Math.abs(x) || 1);
+        const dfx = (f(x+h) - f(x-h)) / (2*h);
+        if(Math.abs(dfx) < 1e-12) break;
+        const xNew = x - fx/dfx;
+        if(!isFinite(xNew)) break;
+        if(Math.abs(xNew - x) < 1e-10){ x = xNew; converged = true; break; }
+        x = xNew;
+      }
+      if(!converged || !isFinite(x)) throw tag(new Error("solve"),"math");
+      xVar = x;
+      ans = x;
+      lastResultValue = x;
+      displayFormat = "dec";
+      renderResult(x);
+      justEvaluated = true;
+      history.push({expr: "Solve(" + expr + "=0), X", val:x});
+      if(history.length>30) history.shift();
+      historyIndex = history.length;
+      renderHistoryPanel();
+      beep(1080,0.06);
+    } catch(e){
+      showError(e.kind || "math");
+    }
+  }
+
   function press(key){
     if(key === "shift"){ shiftActive = !shiftActive; alphaActive = false; beep(920,0.03); updateDisplay(); return; }
     if(key === "alpha"){ alphaActive = !alphaActive; shiftActive = false; beep(920,0.03); updateDisplay(); return; }
@@ -953,17 +1354,32 @@
       case "npr": insertFresh("nPr("); break;
       case "exp": insertFresh("*10^("); break;
       case "neg": insertFresh("-"); break;
+      case "sinh": insertFresh("sinh("); break;
+      case "cosh": insertFresh("cosh("); break;
+      case "tanh": insertFresh("tanh("); break;
+      case "asinh": insertFresh("asinh("); break;
+      case "acosh": insertFresh("acosh("); break;
+      case "atanh": insertFresh("atanh("); break;
+      case "mod": insertFresh("mod("); break;
+      case "setup": openSetup(); break;
+      case "optn": openOptn(); break;
+      case "calc": if(shiftActive){ doSolve(); } else { doCalc(); } break;
+      case "const": openConst(); break;
+      case "conv": openConv(); break;
+      case "reset": openResetConfirm(); break;
       case "del": doDelete(); break;
       case "ac": doClearAll(); break;
       case "left": cursorPos = Math.max(0, cursorPos-1); break;
       case "right": cursorPos = Math.min(expr.length, cursorPos+1); break;
       case "format":
-        // Cycle through all formats: dec -> frac -> sci -> dms -> dec
+        // Cycle through all formats: dec -> frac -> sci -> eng -> dms -> dec
         if(displayFormat === "dec") {
           displayFormat = "frac";
         } else if(displayFormat === "frac") {
           displayFormat = "sci";
         } else if(displayFormat === "sci") {
+          displayFormat = "eng";
+        } else if(displayFormat === "eng") {
           displayFormat = "dms";
         } else {
           displayFormat = "dec";
@@ -1007,6 +1423,11 @@
       {k:"histdown", label:"\u25BC", cls:"key-nav"},
     ],
     [
+      {k:"setup", label:"SETUP", cls:"key-util"},
+      {k:"optn", label:"OPTN", cls:"key-util"},
+      {k:"calc", label:"CALC", shift:"SOLVE", cls:"key-func"},
+    ],
+    [
       {k:"drg", label:"DRG", cls:"key-nav"},
       {k:"inv", label:"x\u207B\u00B9", cls:"key-func"},
       {k:"sq", label:"x\u00B2", shift:"x\u00B3", cls:"key-func"},
@@ -1046,6 +1467,20 @@
       {k:"sd", label:"S\u21D4D", cls:"key-mem"},
       {k:"abs", label:"|x|", cls:"key-mem"},
     ],
+    [
+      {k:"sinh", label:"sinh", cls:"key-func"},
+      {k:"cosh", label:"cosh", cls:"key-func"},
+      {k:"tanh", label:"tanh", cls:"key-func"},
+      {k:"asinh", label:"asinh", cls:"key-func"},
+      {k:"acosh", label:"acosh", cls:"key-func"},
+      {k:"atanh", label:"atanh", cls:"key-func"},
+      {k:"mod", label:"mod", cls:"key-func"},
+    ],
+    [
+      {k:"const", label:"CONST", cls:"key-mem"},
+      {k:"conv", label:"CONV", cls:"key-mem"},
+      {k:"reset", label:"RESET", cls:"key-clear"},
+    ],
   ];
   const DIGIT_ROWS = [
     [
@@ -1080,6 +1515,9 @@
 
   function buildKeypad(container, rows, smallCls){
     rows.forEach(row => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "key-row";
+      rowEl.style.gridTemplateColumns = "repeat(" + row.length + ", 1fr)";
       row.forEach(btn => {
         const el = document.createElement("button");
         el.type = "button";
@@ -1101,8 +1539,9 @@
         lbl.textContent = btn.label;
         el.appendChild(lbl);
         el.addEventListener("click", () => press(btn.k));
-        container.appendChild(el);
+        rowEl.appendChild(el);
       });
+      container.appendChild(rowEl);
     });
   }
   buildKeypad(document.getElementById("keypad-functions"), FUNC_ROWS, true);
@@ -1156,6 +1595,13 @@
   });
 
   /* ============ KEYBOARD SUPPORT ============ */
+  // These base keys already contain shiftActive-aware logic inside press()
+  // (e.g. case "sin" inserts "asin(" when shiftActive is true). Routing
+  // shifted letters through the base key lets that existing logic fire
+  // correctly, instead of calling press() with a key name like "asin" or
+  // "cbrt" that has no matching case and silently does nothing.
+  const LETTER_FUNC_KEYS = { s:"sin", c:"cos", t:"tan", l:"log", n:"ln", q:"sqrt" };
+
   window.addEventListener("keydown", (ev) => {
     const map = {
       "0":"0","1":"1","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9",
@@ -1164,12 +1610,6 @@
       "Enter":"eq", "=":"eq", "Backspace":"del", "Escape":"ac",
       "ArrowLeft":"left", "ArrowRight":"right",
       "ArrowUp":"histup", "ArrowDown":"histdown",
-      "s": ev.shiftKey ? "asin" : "sin",
-      "c": ev.shiftKey ? "acos" : "cos",
-      "t": ev.shiftKey ? "atan" : "tan",
-      "l": ev.shiftKey ? "10^" : "log",
-      "n": ev.shiftKey ? "e^" : "ln",
-      "q": ev.shiftKey ? "cbrt" : "sqrt",
       "p": "pi",
       "e": "e",
       "a": "ans",
@@ -1178,6 +1618,11 @@
       "f": "format"
     };
     const key = ev.key.toLowerCase();
+    if(LETTER_FUNC_KEYS[key]){
+      if(ev.shiftKey) shiftActive = true;
+      press(LETTER_FUNC_KEYS[key]);
+      return;
+    }
     if(map[key]){
       if(["Enter","Backspace","ArrowUp","ArrowDown"].includes(ev.key)) ev.preventDefault();
       press(map[key]);
